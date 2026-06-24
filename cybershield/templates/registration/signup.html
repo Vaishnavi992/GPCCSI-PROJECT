@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Create Account{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div style="text-align:center;margin-bottom:28px;">
+      <div style="width:56px;height:56px;background:linear-gradient(135deg,#4f7cff,#7c3aed);border-radius:16px;display:grid;place-items:center;margin:0 auto 16px;">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div class="auth-title">Create your account</div>
+      <div class="auth-sub">Start detecting threats with AI</div>
+    </div>
+    {% if error %}<div class="error-alert">{{ error }}</div>{% endif %}
+    <form method="POST" action="{% url 'signup' %}">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-input" type="text" name="username" placeholder="choose_a_username" required autocomplete="username"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email (optional)</label>
+        <input class="form-input" type="email" name="email" placeholder="you@example.com" autocomplete="email"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" type="password" name="password1" placeholder="At least 8 characters" required autocomplete="new-password"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <input class="form-input" type="password" name="password2" placeholder="Same password again" required autocomplete="new-password"/>
+      </div>
+      <button type="submit" class="form-submit">Create Account</button>
+      <div class="form-link">Already have an account? <a href="{% url 'login' %}">Sign in →</a></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

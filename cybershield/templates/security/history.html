@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% block title %}Scan History{% endblock %}
+{% block content %}
+<div class="page-header flex items-center justify-between">
+  <div>
+    <h1>Scan History</h1>
+    <p>All your previous URL and QR code scans.</p>
+  </div>
+  <a href="{% url 'url_scanner' %}" class="btn-primary" style="padding:10px 20px;font-size:14px;border-radius:10px;text-decoration:none;font-weight:700;">+ New Scan</a>
+</div>
+
+<!-- FILTERS -->
+<div class="history-filters">
+  <form method="GET" style="display:contents;">
+    <a href="{% url 'history' %}" class="filter-btn {% if not filter_level %}active{% endif %}">All</a>
+    <a href="?level=safe{% if search %}&q={{ search }}{% endif %}" class="filter-btn {% if filter_level == 'safe' %}active{% endif %}" style="color:#10b981;">🟢 Safe</a>
+    <a href="?level=low_risk{% if search %}&q={{ search }}{% endif %}" class="filter-btn {% if filter_level == 'low_risk' %}active{% endif %}" style="color:#3b82f6;">🔵 Low Risk</a>
+    <a href="?level=suspicious{% if search %}&q={{ search }}{% endif %}" class="filter-btn {% if filter_level == 'suspicious' %}active{% endif %}" style="color:#f59e0b;">🟡 Suspicious</a>
+    <a href="?level=high_risk{% if search %}&q={{ search }}{% endif %}" class="filter-btn {% if filter_level == 'high_risk' %}active{% endif %}" style="color:#ef4444;">🔴 High Risk</a>
+    <a href="?level=malicious{% if search %}&q={{ search }}{% endif %}" class="filter-btn {% if filter_level == 'malicious' %}active{% endif %}" style="color:#a855f7;">☠️ Malicious</a>
+    <input type="hidden" name="level" value="{{ filter_level }}"/>
+    <input class="search-input" type="search" name="q" placeholder="Search URLs..." value="{{ search }}" onchange="this.form.submit()" style="margin-left:auto;"/>
+  </form>
+</div>
+
+<!-- URL SCANS TABLE -->
+<div class="card mb-6">
+  <div class="card-header">
+    <div class="card-title"><div class="icon icon-blue"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></div>URL Scans ({{ url_scans|length }})</div>
+  </div>
+  {% if url_scans %}
+  <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>URL</th><th>ML Label</th><th>Risk Score</th><th>Threat Level</th><th>Scanned At</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for scan in url_scans %}
+        <tr>
+          <td class="url-cell" style="max-width:340px;" title="{{ scan.url }}">{{ scan.url }}</td>
+          <td><span class="pill {% if scan.ml_label == 'benign' %}pill-green{% elif scan.ml_label == 'phishing' %}pill-red{% elif scan.ml_label == 'malware' %}pill-red{% else %}pill-orange{% endif %}">{{ scan.ml_label }}</span></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:900;color:#fff;flex-shrink:0;
+                {% if scan.final_risk_score <= 20 %}background:linear-gradient(135deg,#10b981,#059669);
+                {% elif scan.final_risk_score <= 40 %}background:linear-gradient(135deg,#3b82f6,#2563eb);
+                {% elif scan.final_risk_score <= 60 %}background:linear-gradient(135deg,#f59e0b,#d97706);
+                {% elif scan.final_risk_score <= 80 %}background:linear-gradient(135deg,#ef4444,#dc2626);
+                {% else %}background:linear-gradient(135deg,#a855f7,#7c3aed);{% endif %}">
+                {{ scan.final_risk_score }}
+              </div>
+            </div>
+          </td>
+          <td><span class="threat-badge badge-{{ scan.threat_level }}">{{ scan.threat_level|title }}</span></td>
+          <td style="color:var(--text2);font-size:13px;white-space:nowrap;">{{ scan.submitted_at|date:"M d, Y H:i" }}</td>
+          <td>
+            <div style="display:flex;gap:8px;">
+              <a href="{% url 'report_detail' scan.pk %}" class="btn-ghost" style="padding:5px 12px;font-size:12px;border-radius:7px;">Report</a>
+              <button onclick="deleteScan({{ scan.pk }}, this)" style="padding:5px 12px;font-size:12px;border-radius:7px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#ef4444;cursor:pointer;transition:.15s;" onmouseover="this.style.background='rgba(239,68,68,.2)'" onmouseout="this.style.background='rgba(239,68,68,.1)'">Delete</button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <h3>No scans found</h3>
+    <p>{% if search or filter_level %}Try changing your filters. {% endif %}<a href="{% url 'url_scanner' %}" style="color:var(--accent);">Scan a URL →</a></p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- QR SCANS -->
+{% if qr_scans %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><div class="icon icon-purple"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>QR Scans ({{ qr_scans|length }})</div>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead><tr><th>Filename</th><th>Decoded URL</th><th>Status</th><th>Scanned At</th></tr></thead>
+      <tbody>
+        {% for qr in qr_scans %}
+        <tr>
+          <td style="font-size:13px;">{{ qr.filename }}</td>
+          <td class="url-cell">{% if qr.decoded_url %}{{ qr.decoded_url }}{% else %}<em style="color:var(--text3);">Decode failed</em>{% endif %}</td>
+          <td>{% if qr.decode_success %}<span class="pill pill-green">✅ Decoded</span>{% else %}<span class="pill pill-red">❌ Failed</span>{% endif %}</td>
+          <td style="color:var(--text2);font-size:13px;white-space:nowrap;">{{ qr.submitted_at|date:"M d, Y H:i" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% csrf_token %}
+{% endblock %}

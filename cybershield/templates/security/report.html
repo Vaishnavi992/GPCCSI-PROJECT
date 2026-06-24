@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+{% block title %}Scan Report #{{ url_scan.pk }}{% endblock %}
+{% block content %}
+<div class="page-header flex items-center justify-between">
+  <div>
+    <h1>Security Report <span style="color:var(--text3);font-weight:400;font-size:24px;">#{{ url_scan.pk }}</span></h1>
+    <p>Full analysis — {{ url_scan.submitted_at|date:"F d, Y at H:i" }}</p>
+  </div>
+  <a href="{% url 'history' %}" class="btn-ghost" style="padding:10px 20px;font-size:14px;border-radius:10px;text-decoration:none;">← Back to History</a>
+</div>
+
+<!-- RISK HEADER -->
+<div class="result-header">
+  <div class="risk-gauge">
+    <div style="width:130px;height:130px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      {% if url_scan.final_risk_score <= 20 %}background:linear-gradient(135deg,#10b981,#059669);
+      {% elif url_scan.final_risk_score <= 40 %}background:linear-gradient(135deg,#3b82f6,#2563eb);
+      {% elif url_scan.final_risk_score <= 60 %}background:linear-gradient(135deg,#f59e0b,#d97706);
+      {% elif url_scan.final_risk_score <= 80 %}background:linear-gradient(135deg,#ef4444,#dc2626);
+      {% else %}background:linear-gradient(135deg,#a855f7,#7c3aed);{% endif %}
+      box-shadow:var(--shadow-lg);">
+      <div style="font-size:40px;font-weight:900;color:#fff;line-height:1;">{{ url_scan.final_risk_score }}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;">/100 risk</div>
+    </div>
+  </div>
+  <div class="result-info">
+    <div class="result-threat-level" style="color:{{ level_color }};">
+      {% if url_scan.final_risk_score <= 20 %}🟢{% elif url_scan.final_risk_score <= 40 %}🔵{% elif url_scan.final_risk_score <= 60 %}🟡{% elif url_scan.final_risk_score <= 80 %}🔴{% else %}☠️{% endif %}
+      {{ level_label }}
+    </div>
+    <div class="result-url" style="font-size:14px;margin-bottom:14px;">{{ url_scan.url }}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      <span class="pill {% if url_scan.ml_label == 'benign' %}pill-green{% else %}pill-red{% endif %}">ML: {{ url_scan.ml_label|upper }}</span>
+      <span class="pill pill-blue">{{ url_scan.ml_confidence|floatformat:1% }} confidence</span>
+      <span class="pill pill-orange">ML Score: {{ url_scan.ml_risk_score }}/100</span>
+    </div>
+    {% if report.recommendation %}
+    <div class="result-recommendation">💡 {{ report.recommendation }}</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- TWO COLUMN: FEATURES + HEURISTICS -->
+<div class="two-col mt-6">
+  <!-- Extracted URL Features -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="icon icon-blue"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>Extracted URL Features ({{ features|length }})</div>
+    </div>
+    {% if features %}
+    <div class="feature-grid">
+      {% for key, val in features.items %}
+      <div class="feature-item">
+        <div class="feature-key">{{ key }}</div>
+        <div class="feature-val">
+          {% if val == 0 or val == False %}
+            <span style="color:var(--text3);">0</span>
+          {% elif val == 1 or val == True %}
+            <span style="color:#10b981;">✓ Yes</span>
+          {% else %}
+            {{ val }}
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:var(--text3);font-size:14px;">Feature data not available.</p>
+    {% endif %}
+  </div>
+
+  <!-- Heuristic Analysis -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="icon icon-orange"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>Heuristic Analysis</div>
+      {% if heuristic.heuristic_score is not None %}
+      <span class="pill {% if heuristic.heuristic_score > 40 %}pill-red{% elif heuristic.heuristic_score > 20 %}pill-orange{% else %}pill-green{% endif %}">Score: {{ heuristic.heuristic_score }}/100</span>
+      {% endif %}
+    </div>
+    <ul class="flags-list">
+      {% for flag in heuristic.flags %}
+      <li>{{ flag }}</li>
+      {% empty %}
+      <li style="color:var(--text3);">No heuristic flags.</li>
+      {% endfor %}
+    </ul>
+    {% if heuristic.resolved_ip %}
+    <div style="margin-top:14px;padding:10px 14px;background:var(--bg3);border-radius:8px;font-size:13px;font-family:var(--mono);color:var(--text2);">
+      Resolved IP: {{ heuristic.resolved_ip }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- THREAT INTELLIGENCE DETAILS -->
+<div class="mt-6">
+  <div class="section-title">Threat Intelligence Results</div>
+  <div class="ti-grid">
+    {% if report %}
+    <!-- VirusTotal -->
+    <div class="ti-card">
+      <div class="ti-header"><span class="ti-name">🔍 VirusTotal</span>
+        <span class="ti-status {% if report.vt_total > 0 %}ti-available{% else %}ti-unavailable{% endif %}">
+          {% if report.vt_total > 0 %}Scanned{% else %}No Data{% endif %}
+        </span>
+      </div>
+      {% if report.vt_total > 0 %}
+      <div class="ti-score" style="{% if report.vt_malicious > 0 %}color:#ef4444;{% else %}color:#10b981;{% endif %}">
+        {{ report.vt_malicious }}/{{ report.vt_total }}
+      </div>
+      <div class="ti-body">
+        Malicious: <strong>{{ report.vt_malicious }}</strong> &bull;
+        Suspicious: <strong>{{ report.vt_suspicious }}</strong> &bull;
+        Harmless: <strong>{{ report.vt_harmless }}</strong>
+      </div>
+      {% if report.vt_permalink %}<a href="{{ report.vt_permalink }}" target="_blank" class="ti-link" style="display:block;margin-top:8px;">View on VirusTotal ↗</a>{% endif %}
+      {% else %}<div class="ti-body" style="color:var(--text3);">No VirusTotal data — configure API key</div>{% endif %}
+    </div>
+
+    <!-- Google Safe Browsing -->
+    <div class="ti-card">
+      <div class="ti-header"><span class="ti-name">🛡️ Google Safe Browsing</span>
+        <span class="ti-status {% if report.gsb_is_safe %}ti-available{% else %}ti-unavailable{% endif %}">
+          {% if report.gsb_is_safe %}Clean{% else %}Threat!{% endif %}
+        </span>
+      </div>
+      <div class="ti-score" style="{% if not report.gsb_is_safe %}color:#ef4444;{% else %}color:#10b981;{% endif %}">
+        {% if report.gsb_is_safe %}✅ Safe{% else %}🚨 Flagged{% endif %}
+      </div>
+      {% if not report.gsb_is_safe %}
+      <div class="ti-body">Threats: {{ report.gsb_threats }}</div>
+      {% else %}
+      <div class="ti-body">Not listed in any Google threat database.</div>
+      {% endif %}
+    </div>
+
+    <!-- PhishTank -->
+    <div class="ti-card">
+      <div class="ti-header"><span class="ti-name">🎣 PhishTank</span>
+        <span class="ti-status {% if not report.pt_in_database %}ti-available{% else %}ti-unavailable{% endif %}">
+          {% if report.pt_in_database %}In Database{% else %}Not Listed{% endif %}
+        </span>
+      </div>
+      <div class="ti-score" style="{% if report.pt_in_database %}color:#ef4444;{% else %}color:#10b981;{% endif %}">
+        {% if report.pt_in_database %}⚠️ Known Phish{% else %}✅ Not Listed{% endif %}
+      </div>
+      <div class="ti-body">Verified phishing: {{ report.pt_verified|yesno:"Yes,No" }}</div>
+    </div>
+
+    <!-- AbuseIPDB -->
+    <div class="ti-card">
+      <div class="ti-header"><span class="ti-name">🌐 AbuseIPDB</span>
+        <span class="ti-status {% if report.abuse_ip %}ti-available{% else %}ti-unavailable{% endif %}">
+          {% if report.abuse_ip %}Checked{% else %}No Data{% endif %}
+        </span>
+      </div>
+      {% if report.abuse_ip %}
+      <div class="ti-score" style="{% if report.abuse_confidence > 50 %}color:#ef4444;{% elif report.abuse_confidence > 20 %}color:#f59e0b;{% else %}color:#10b981;{% endif %}">
+        {{ report.abuse_confidence }}% abuse confidence
+      </div>
+      <div class="ti-body">IP: <span class="mono">{{ report.abuse_ip }}</span> &bull; Country: {{ report.abuse_country }}</div>
+      {% else %}<div class="ti-body" style="color:var(--text3);">No AbuseIPDB data — configure API key</div>{% endif %}
+    </div>
+    {% endif %}
+
+    <!-- From stored TI JSON for URLScan -->
+    {% if ti_data.urlscan %}
+    {% with us=ti_data.urlscan %}
+    <div class="ti-card">
+      <div class="ti-header"><span class="ti-name">🔬 URLScan.io</span>
+        <span class="ti-status {% if us.available %}ti-available{% else %}ti-unavailable{% endif %}">
+          {% if us.available %}Scanned{% else %}No Key{% endif %}
+        </span>
+      </div>
+      {% if us.available %}
+      <div class="ti-score" style="{% if us.is_malicious %}color:#ef4444;{% else %}color:#10b981;{% endif %}">
+        {% if us.is_malicious %}🚨 Malicious{% else %}✅ Clean{% endif %}
+      </div>
+      {% if us.result_url %}<a href="{{ us.result_url }}" target="_blank" class="ti-link" style="display:block;margin-top:8px;">View sandbox report ↗</a>{% endif %}
+      {% else %}<div class="ti-body" style="color:var(--text3);">{{ us.error|default:"No URLScan data" }}</div>{% endif %}
+    </div>
+    {% endwith %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% block title %}Analytics{% endblock %}
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Analytics</h1>
+  <p>Threat intelligence patterns from your {{ total_scans }} scans.</p>
+</div>
+
+{% if total_scans == 0 %}
+<div class="empty-state" style="padding:100px;">
+  <h3>No scan data yet</h3>
+  <p>Start scanning URLs to see analytics here.</p>
+  <a href="{% url 'url_scanner' %}" class="btn-primary" style="display:inline-block;margin-top:16px;padding:10px 22px;border-radius:10px;text-decoration:none;font-weight:700;">Scan a URL →</a>
+</div>
+{% else %}
+
+<!-- STATS ROW -->
+<div class="stats-grid" style="margin-bottom:32px;">
+  <div class="stat-card accent-blue">
+    <div class="stat-label">Total Scans</div>
+    <div class="stat-value stat-accent-blue">{{ total_scans }}</div>
+  </div>
+  <div class="stat-card accent-orange" style="border-color:rgba(245,158,11,.3);">
+    <div class="stat-label">Avg Risk Score</div>
+    <div class="stat-value" style="color:#f59e0b;">{{ avg_risk }}</div>
+    <div class="stat-sub">out of 100</div>
+  </div>
+</div>
+
+<!-- CHARTS -->
+<div class="two-col mb-6">
+  <div class="chart-card">
+    <div class="chart-title">Threat Level Distribution</div>
+    <canvas id="threatChart" height="220"></canvas>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">ML Label Distribution</div>
+    <canvas id="mlChart" height="220"></canvas>
+  </div>
+</div>
+
+<!-- SCAN TREND -->
+<div class="chart-card mb-6">
+  <div class="chart-title">Scans Over Last 30 Days</div>
+  <canvas id="trendChart" height="100"></canvas>
+</div>
+
+<!-- TOP THREATS TABLE -->
+{% if top_threats %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><div class="icon icon-red"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>Top Threats Detected</div>
+  </div>
+  <table class="data-table">
+    <thead><tr><th>URL</th><th>ML Label</th><th>Risk Score</th><th>Threat Level</th><th>Date</th></tr></thead>
+    <tbody>
+      {% for scan in top_threats %}
+      <tr>
+        <td class="url-cell">{{ scan.url }}</td>
+        <td><span class="pill pill-red">{{ scan.ml_label }}</span></td>
+        <td style="font-weight:900;{% if scan.final_risk_score > 80 %}color:#a855f7;{% else %}color:#ef4444;{% endif %}">{{ scan.final_risk_score }}/100</td>
+        <td><span class="threat-badge badge-{{ scan.threat_level }}">{{ scan.threat_level|title }}</span></td>
+        <td style="font-size:13px;color:var(--text2);">{{ scan.submitted_at|date:"M d, Y" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>
+const threatData = {{ threat_dist|safe }};
+const mlData = {{ ml_dist|safe }};
+const trendData = {{ daily|safe }};
+
+const COLORS = {
+  safe:'#10b981', low_risk:'#3b82f6', suspicious:'#f59e0b',
+  high_risk:'#ef4444', malicious:'#a855f7',
+  benign:'#10b981', defacement:'#f59e0b', malware:'#a855f7', phishing:'#ef4444'
+};
+
+const chartDefaults = {
+  responsive:true,
+  plugins:{ legend:{ labels:{ color:'#a8b2c8', font:{ family:'Inter', size:12 } } } }
+};
+
+// Threat chart
+if(threatData.length > 0) {
+  new Chart(document.getElementById('threatChart'), {
+    type:'doughnut',
+    data:{
+      labels: threatData.map(d=>d.threat_level.replace('_',' ')),
+      datasets:[{ data: threatData.map(d=>d.count), backgroundColor: threatData.map(d=>COLORS[d.threat_level]||'#6b7a9e'), borderWidth:0 }]
+    },
+    options:{ ...chartDefaults, cutout:'65%' }
+  });
+}
+
+// ML chart
+if(mlData.length > 0) {
+  new Chart(document.getElementById('mlChart'), {
+    type:'bar',
+    data:{
+      labels: mlData.map(d=>d.ml_label),
+      datasets:[{ data: mlData.map(d=>d.count), backgroundColor: mlData.map(d=>COLORS[d.ml_label]||'#4f7cff'), borderRadius:6 }]
+    },
+    options:{ ...chartDefaults, plugins:{ legend:{ display:false } }, scales:{
+      x:{ ticks:{ color:'#a8b2c8' }, grid:{ color:'rgba(255,255,255,.05)' } },
+      y:{ ticks:{ color:'#a8b2c8' }, grid:{ color:'rgba(255,255,255,.05)' } }
+    }}
+  });
+}
+
+// Trend chart
+if(trendData.length > 0) {
+  new Chart(document.getElementById('trendChart'), {
+    type:'line',
+    data:{
+      labels: trendData.map(d=>d.day),
+      datasets:[{
+        label:'Scans', data: trendData.map(d=>d.count),
+        borderColor:'#4f7cff', backgroundColor:'rgba(79,124,255,.1)',
+        fill:true, tension:0.4, pointBackgroundColor:'#4f7cff', pointRadius:4
+      }]
+    },
+    options:{ ...chartDefaults, scales:{
+      x:{ ticks:{ color:'#a8b2c8' }, grid:{ color:'rgba(255,255,255,.05)' } },
+      y:{ ticks:{ color:'#a8b2c8' }, grid:{ color:'rgba(255,255,255,.05)' } }
+    }}
+  });
+}
+</script>
+{% endblock %}

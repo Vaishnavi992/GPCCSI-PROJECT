@@ -1,0 +1,259 @@
+{% extends 'base.html' %}
+{% block title %}URL Scanner{% endblock %}
+{% block content %}
+
+<div id="loading-overlay" class="loading-overlay">
+  <div class="big-spinner"></div>
+  <div class="loading-text">Scanning URL...</div>
+  <div class="loading-sub">Running ML model + 5 threat intelligence APIs</div>
+</div>
+
+<div class="page-header">
+  <h1>URL Scanner</h1>
+  <p>Enter any URL — we'll classify it using our XGBoost+LightGBM ensemble and live threat intelligence.</p>
+</div>
+
+<!-- SCAN BOX -->
+<div class="scan-box">
+  <form id="url-scan-form" method="POST" action="{% url 'url_scanner' %}">
+    {% csrf_token %}
+    <div class="url-form">
+      <input id="url-input" type="url" name="url" class="url-input"
+        placeholder="https://example.com/path?query=value"
+        value="{{ url }}" autocomplete="off" spellcheck="false" required/>
+      <button type="submit" class="scan-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Scan URL
+      </button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center;">
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Try example:</span>
+      {% for sample in "https://google.com|http://192.168.1.1/login|https://secure-paypal-verify.tk/account"|split_pipe %}{% endfor %}
+      <span class="sample-url" data-url="https://google.com" style="font-size:11px;font-family:var(--mono);color:var(--accent);background:rgba(79,124,255,.08);border:1px solid rgba(79,124,255,.2);border-radius:99px;padding:3px 10px;cursor:pointer;">google.com</span>
+      <span class="sample-url" data-url="https://www.github.com" style="font-size:11px;font-family:var(--mono);color:var(--accent);background:rgba(79,124,255,.08);border:1px solid rgba(79,124,255,.2);border-radius:99px;padding:3px 10px;cursor:pointer;">github.com</span>
+      <span class="sample-url" data-url="http://paypal-secure-login-verify.tk/account/update" style="font-size:11px;font-family:var(--mono);color:#ef4444;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:99px;padding:3px 10px;cursor:pointer;">phishing example</span>
+    </div>
+  </form>
+</div>
+
+<!-- ERROR -->
+{% if error %}
+<div class="error-alert" style="margin-bottom:24px;">⚠️ {{ error }}</div>
+{% endif %}
+
+<!-- RESULTS -->
+{% if result %}
+{% with score=result.final_risk_score level=result.threat_level %}
+
+<!-- RISK HEADER -->
+<div class="result-header">
+  <div class="risk-gauge">
+    <div class="risk-circle" data-score="{{ score }}" style="width:120px;height:120px;flex-direction:column;
+      {% if score <= 20 %}background:linear-gradient(135deg,#10b981,#059669);
+      {% elif score <= 40 %}background:linear-gradient(135deg,#3b82f6,#2563eb);
+      {% elif score <= 60 %}background:linear-gradient(135deg,#f59e0b,#d97706);
+      {% elif score <= 80 %}background:linear-gradient(135deg,#ef4444,#dc2626);
+      {% else %}background:linear-gradient(135deg,#a855f7,#7c3aed);{% endif %}
+      display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-lg);">
+      <div style="font-size:34px;font-weight:900;color:#fff;line-height:1;">{{ score }}</div>
+      <div style="font-size:10px;color:rgba(255,255,255,.8);text-transform:uppercase;letter-spacing:.5px;">/100</div>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:var(--text3);text-align:center;">Risk Score</div>
+  </div>
+
+  <div class="result-info">
+    <div class="result-threat-level" style="
+      {% if score <= 20 %}color:#10b981;
+      {% elif score <= 40 %}color:#3b82f6;
+      {% elif score <= 60 %}color:#f59e0b;
+      {% elif score <= 80 %}color:#ef4444;
+      {% else %}color:#a855f7;{% endif %}">
+      {{ result.threat_emoji }} {{ result.threat_level }}
+    </div>
+    <div class="result-url">{{ result.url }}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+      <span class="pill pill-{{ result.ml_prediction.label|lower }}{% if result.ml_prediction.label == 'benign' %} pill-green{% elif result.ml_prediction.label == 'phishing' %} pill-red{% elif result.ml_prediction.label == 'malware' %} pill-red{% else %} pill-orange{% endif %}">
+        ML: {{ result.ml_prediction.label|upper }}
+      </span>
+      <span class="pill {% if result.ml_prediction.confidence > 0.8 %}pill-green{% elif result.ml_prediction.confidence > 0.6 %}pill-orange{% else %}pill-red{% endif %}">
+        Confidence: {{ result.ml_prediction.confidence|floatformat:1% }}
+      </span>
+    </div>
+    <div class="result-recommendation">💡 {{ result.recommendation }}</div>
+    <div style="margin-top:14px;">
+      <a href="{% url 'report_detail' result.scan_id %}" class="btn-primary" style="display:inline-block;padding:9px 18px;font-size:14px;border-radius:9px;text-decoration:none;">View Full Report →</a>
+    </div>
+  </div>
+</div>
+
+<!-- COMPONENT SCORES -->
+<div class="two-col">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="icon icon-blue"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Component Risk Scores</div>
+    </div>
+    {% for name, score_val in result.component_scores.items %}
+    <div class="score-row">
+      <div class="score-name">{{ name|title|cut:"_" }}</div>
+      <div class="score-bar-wrap">
+        <div class="score-bar" data-width="{{ score_val }}" style="width:0;
+          {% if score_val <= 20 %}background:#10b981;
+          {% elif score_val <= 40 %}background:#3b82f6;
+          {% elif score_val <= 60 %}background:#f59e0b;
+          {% elif score_val <= 80 %}background:#ef4444;
+          {% else %}background:#a855f7;{% endif %}
+          transition:width .8s ease;"></div>
+      </div>
+      <div class="score-num" style="
+        {% if score_val <= 20 %}color:#10b981;
+        {% elif score_val <= 40 %}color:#3b82f6;
+        {% elif score_val <= 60 %}color:#f59e0b;
+        {% elif score_val <= 80 %}color:#ef4444;
+        {% else %}color:#a855f7;{% endif %}">{{ score_val }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="icon icon-orange"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>ML Probabilities</div>
+    </div>
+    {% for label, prob in result.ml_prediction.probabilities.items %}
+    <div class="score-row">
+      <div class="score-name">{{ label|title }}</div>
+      <div class="score-bar-wrap">
+        <div class="score-bar" data-width="{% widthratio prob 1 100 %}" style="width:0;
+          {% if label == 'benign' %}background:#10b981;
+          {% elif label == 'defacement' %}background:#f59e0b;
+          {% elif label == 'malware' %}background:#a855f7;
+          {% else %}background:#ef4444;{% endif %}
+          transition:width .8s ease;"></div>
+      </div>
+      <div class="score-num" style="color:var(--text2);">{{ prob|floatformat:2% }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- HEURISTIC FLAGS -->
+<div class="card mt-6">
+  <div class="card-header">
+    <div class="card-title"><div class="icon icon-red"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>Heuristic Analysis Flags</div>
+    <span class="pill {% if result.heuristic.heuristic_score > 40 %}pill-red{% elif result.heuristic.heuristic_score > 20 %}pill-orange{% else %}pill-green{% endif %}">Score: {{ result.heuristic.heuristic_score }}/100</span>
+  </div>
+  <ul class="flags-list">
+    {% for flag in result.heuristic.flags %}
+    <li>{{ flag }}</li>
+    {% empty %}
+    <li>No heuristic flags generated.</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<!-- TI API RESULTS -->
+<div class="mt-6">
+  <div class="section-title">Threat Intelligence APIs</div>
+  <div class="ti-grid">
+    <!-- VirusTotal -->
+    {% with vt=result.threat_intel.virustotal %}
+    <div class="ti-card">
+      <div class="ti-header">
+        <span class="ti-name">🔍 VirusTotal</span>
+        <span class="ti-status {% if vt.available %}ti-available{% else %}ti-unavailable{% endif %}">
+          {% if vt.available %}Active{% else %}No Key{% endif %}
+        </span>
+      </div>
+      {% if vt.available %}
+      <div class="ti-score" style="{% if vt.malicious > 0 %}color:#ef4444;{% elif vt.suspicious > 0 %}color:#f59e0b;{% else %}color:#10b981;{% endif %}">
+        {{ vt.malicious }}/{{ vt.total_engines }}
+      </div>
+      <div class="ti-body">Malicious: {{ vt.malicious }} &bull; Suspicious: {{ vt.suspicious }} &bull; Harmless: {{ vt.harmless }}</div>
+      {% if vt.permalink %}<a href="{{ vt.permalink }}" target="_blank" class="ti-link">View full report ↗</a>{% endif %}
+      {% else %}<div class="ti-body" style="color:var(--text3);">{{ vt.error|default:"Configure VIRUSTOTAL_API_KEY in .env" }}</div>{% endif %}
+    </div>
+    {% endwith %}
+
+    <!-- Google Safe Browsing -->
+    {% with gsb=result.threat_intel.google_safebrowsing %}
+    <div class="ti-card">
+      <div class="ti-header">
+        <span class="ti-name">🛡️ Google Safe Browsing</span>
+        <span class="ti-status {% if gsb.available %}ti-available{% else %}ti-unavailable{% endif %}">
+          {% if gsb.available %}Active{% else %}No Key{% endif %}
+        </span>
+      </div>
+      {% if gsb.available %}
+      <div class="ti-score" style="{% if not gsb.is_safe %}color:#ef4444;{% else %}color:#10b981;{% endif %}">
+        {% if gsb.is_safe %}✅ Clean{% else %}🚨 Threat{% endif %}
+      </div>
+      {% if not gsb.is_safe %}<div class="ti-body">Threats: {{ gsb.threat_types|join:", " }}</div>{% else %}<div class="ti-body">Not listed in any threat database.</div>{% endif %}
+      {% else %}<div class="ti-body" style="color:var(--text3);">{{ gsb.error|default:"Configure GOOGLE_SAFE_BROWSING_API_KEY in .env" }}</div>{% endif %}
+    </div>
+    {% endwith %}
+
+    <!-- PhishTank -->
+    {% with pt=result.threat_intel.phishtank %}
+    <div class="ti-card">
+      <div class="ti-header">
+        <span class="ti-name">🎣 PhishTank</span>
+        <span class="ti-status {% if pt.available %}ti-available{% else %}ti-unavailable{% endif %}">
+          {% if pt.available %}Active{% else %}Unavailable{% endif %}
+        </span>
+      </div>
+      {% if pt.available %}
+      <div class="ti-score" style="{% if pt.in_database %}color:#ef4444;{% else %}color:#10b981;{% endif %}">
+        {% if pt.in_database %}⚠️ Found{% else %}✅ Not Listed{% endif %}
+      </div>
+      <div class="ti-body">In database: {{ pt.in_database|yesno:"Yes,No" }} &bull; Verified: {{ pt.verified|yesno:"Yes,No" }}</div>
+      {% else %}<div class="ti-body" style="color:var(--text3);">{{ pt.error|default:"PhishTank check skipped" }}</div>{% endif %}
+    </div>
+    {% endwith %}
+
+    <!-- AbuseIPDB -->
+    {% with ab=result.threat_intel.abuseipdb %}
+    <div class="ti-card">
+      <div class="ti-header">
+        <span class="ti-name">🌐 AbuseIPDB</span>
+        <span class="ti-status {% if ab.available %}ti-available{% else %}ti-unavailable{% endif %}">
+          {% if ab.available %}Active{% else %}No Key{% endif %}
+        </span>
+      </div>
+      {% if ab.available %}
+      <div class="ti-score" style="{% if ab.abuse_confidence > 50 %}color:#ef4444;{% elif ab.abuse_confidence > 20 %}color:#f59e0b;{% else %}color:#10b981;{% endif %}">
+        {{ ab.abuse_confidence }}% abuse
+      </div>
+      <div class="ti-body">IP: {{ ab.ip_address }} &bull; {{ ab.country_code }} &bull; {{ ab.total_reports }} reports</div>
+      {% else %}<div class="ti-body" style="color:var(--text3);">{{ ab.error|default:"Configure ABUSEIPDB_API_KEY in .env" }}</div>{% endif %}
+    </div>
+    {% endwith %}
+
+    <!-- URLScan.io -->
+    {% with us=result.threat_intel.urlscan %}
+    <div class="ti-card">
+      <div class="ti-header">
+        <span class="ti-name">🔬 URLScan.io</span>
+        <span class="ti-status {% if us.available %}ti-available{% else %}ti-unavailable{% endif %}">
+          {% if us.available %}Active{% else %}No Key{% endif %}
+        </span>
+      </div>
+      {% if us.available %}
+      <div class="ti-score" style="{% if us.is_malicious %}color:#ef4444;{% else %}color:#10b981;{% endif %}">
+        {% if us.is_malicious %}🚨 Malicious{% else %}✅ Clean{% endif %}
+      </div>
+      {% if us.result_url %}<a href="{{ us.result_url }}" target="_blank" class="ti-link">View sandbox report ↗</a>{% endif %}
+      {% else %}<div class="ti-body" style="color:var(--text3);">{{ us.error|default:"Configure URLSCAN_API_KEY in .env" }}</div>{% endif %}
+    </div>
+    {% endwith %}
+  </div>
+</div>
+
+{% endwith %}
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>
+setTimeout(()=>{
+  document.querySelectorAll('.score-bar[data-width]').forEach(b=>{ b.style.width=b.dataset.width+'%'; });
+},100);
+</script>
+{% endblock %}

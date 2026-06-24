@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}QR Scanner{% endblock %}
+{% block content %}
+<div id="loading-overlay" class="loading-overlay">
+  <div class="big-spinner"></div>
+  <div class="loading-text">Decoding QR code...</div>
+  <div class="loading-sub">Extracting URL and running full threat analysis</div>
+</div>
+
+<div class="page-header">
+  <h1>QR Code Scanner</h1>
+  <p>Upload QR code images to decode the embedded URL and run a full security analysis.</p>
+</div>
+
+<div class="scan-box">
+  <form id="qr-scan-form" method="POST" action="{% url 'qr_scanner' %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div id="upload-zone" class="upload-zone">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="3" y="14" width="7" height="7"/><path d="M14 17h3v3"/><path d="M17 14h3"/><path d="M14 14h3"/>
+        </svg>
+      </div>
+      <div class="upload-title">Drop QR Code Images Here</div>
+      <div class="upload-desc">Supports PNG, JPEG, BMP, WebP — batch upload up to 20 images</div>
+      <label class="upload-btn" for="file-input">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Choose Files
+      </label>
+      <input type="file" name="qr_images" id="file-input" accept="image/*" multiple/>
+      <div id="file-list" class="file-list"></div>
+    </div>
+    <div style="margin-top:16px;text-align:center;">
+      <button type="submit" id="scan-submit" class="scan-btn" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Scan QR Codes
+      </button>
+    </div>
+  </form>
+</div>
+
+{% if error %}
+<div class="error-alert">⚠️ {{ error }}</div>
+{% endif %}
+
+{% for entry in results %}
+<div class="qr-result">
+  <div class="qr-result-header">
+    <div class="upload-icon" style="width:44px;height:44px;border-radius:10px;flex-shrink:0;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="3" y="14" width="7" height="7"/>
+      </svg>
+    </div>
+    <div>
+      <div class="qr-filename">{{ entry.filename }}</div>
+      {% if entry.decode.success %}
+      <span class="pill pill-green" style="font-size:11px;">✅ QR Decoded — {{ entry.decode.method }}</span>
+      {% else %}
+      <span class="pill pill-red" style="font-size:11px;">❌ Decode Failed</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if entry.error %}
+  <div class="error-alert">{{ entry.error }}</div>
+  {% endif %}
+
+  {% if entry.decode.success %}
+  <div class="section-title" style="font-size:12px;">Decoded URL</div>
+  <div class="qr-decoded-url">{{ entry.decode.data }}</div>
+  {% endif %}
+
+  {% if entry.scan %}
+  {% with result=entry.scan score=entry.scan.final_risk_score %}
+  <div style="display:flex;align-items:flex-start;gap:20px;background:var(--bg3);border-radius:12px;padding:20px;border:1px solid var(--border);">
+    <div style="text-align:center;flex-shrink:0;">
+      <div style="width:80px;height:80px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        {% if score <= 20 %}background:linear-gradient(135deg,#10b981,#059669);
+        {% elif score <= 40 %}background:linear-gradient(135deg,#3b82f6,#2563eb);
+        {% elif score <= 60 %}background:linear-gradient(135deg,#f59e0b,#d97706);
+        {% elif score <= 80 %}background:linear-gradient(135deg,#ef4444,#dc2626);
+        {% else %}background:linear-gradient(135deg,#a855f7,#7c3aed);{% endif %}
+        box-shadow:var(--shadow);">
+        <div style="font-size:24px;font-weight:900;color:#fff;line-height:1;">{{ score }}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.8);">/100</div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;">Risk Score</div>
+    </div>
+    <div style="flex:1;">
+      <div style="font-size:22px;font-weight:900;margin-bottom:6px;
+        {% if score <= 20 %}color:#10b981;{% elif score <= 40 %}color:#3b82f6;{% elif score <= 60 %}color:#f59e0b;{% elif score <= 80 %}color:#ef4444;{% else %}color:#a855f7;{% endif %}">
+        {{ result.threat_emoji }} {{ result.threat_level }}
+      </div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">
+        ML Prediction: <strong style="color:var(--text);">{{ result.ml_prediction.label|upper }}</strong>
+        ({{ result.ml_prediction.confidence|floatformat:1% }} confidence)
+      </div>
+      <div style="font-size:13px;color:var(--text);background:var(--card);border-left:3px solid var(--accent);padding:10px 14px;border-radius:8px;margin-bottom:14px;">
+        💡 {{ result.recommendation }}
+      </div>
+      <a href="{% url 'report_detail' result.scan_id %}" class="btn-primary" style="display:inline-block;padding:8px 16px;font-size:13px;border-radius:8px;text-decoration:none;font-weight:700;">View Full Report →</a>
+    </div>
+  </div>
+  {% endwith %}
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

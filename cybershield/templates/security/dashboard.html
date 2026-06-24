@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-header flex items-center justify-between">
+  <div>
+    <h1>Dashboard</h1>
+    <p>Welcome back, <strong>{{ user.username }}</strong> — here's your security overview</p>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <a href="{% url 'url_scanner' %}" class="btn-primary" style="padding:10px 20px;font-size:14px;border-radius:10px;text-decoration:none;font-weight:700;">+ Scan URL</a>
+    <a href="{% url 'qr_scanner' %}" class="btn-ghost" style="padding:10px 20px;font-size:14px;border-radius:10px;text-decoration:none;font-weight:700;">+ Scan QR</a>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats-grid">
+  <div class="stat-card accent-blue">
+    <div class="stat-label">Total URL Scans</div>
+    <div class="stat-value stat-accent-blue">{{ total_scans }}</div>
+    <div class="stat-sub">All time</div>
+  </div>
+  <div class="stat-card accent-purple">
+    <div class="stat-label">QR Scans</div>
+    <div class="stat-value stat-accent-purple">{{ total_qr }}</div>
+    <div class="stat-sub">All time</div>
+  </div>
+  <div class="stat-card accent-red">
+    <div class="stat-label">Malicious / High Risk</div>
+    <div class="stat-value stat-accent-red">{{ malicious_pct }}%</div>
+    <div class="stat-sub">Of all scanned URLs</div>
+  </div>
+  <div class="stat-card accent-green">
+    <div class="stat-label">Safe URLs</div>
+    <div class="stat-value stat-accent-green">{{ threat_counts.safe|default:"0" }}</div>
+    <div class="stat-sub">Confirmed clean</div>
+  </div>
+</div>
+
+<!-- THREAT BREAKDOWN + RECENT -->
+<div class="two-col mt-6">
+  <!-- Threat breakdown -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="icon icon-orange"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>Threat Breakdown</div>
+    </div>
+    {% with total=total_scans|default:1 %}
+    {% for level, label, color in "safe,Safe,#10b981|low_risk,Low Risk,#3b82f6|suspicious,Suspicious,#f59e0b|high_risk,High Risk,#ef4444|malicious,Malicious,#a855f7"|split_pipe %}
+    {% endfor %}
+    <!-- Manual render since we can't do split in templates easily -->
+    {% if total_scans == 0 %}
+    <div class="empty-state"><p>No scans yet. <a href="{% url 'url_scanner' %}" style="color:var(--accent)">Scan your first URL →</a></p></div>
+    {% else %}
+    <div class="donut-row">
+      <span class="donut-label" style="color:#10b981;">🟢 Safe</span>
+      <div class="donut-bar" data-width="{% widthratio threat_counts.safe|default:0 total_scans 100 %}" style="background:#10b981;width:0;transition:width .8s;border-radius:4px;"></div>
+      <span class="donut-count">{{ threat_counts.safe|default:"0" }}</span>
+    </div>
+    <div class="donut-row">
+      <span class="donut-label" style="color:#3b82f6;">🔵 Low Risk</span>
+      <div class="donut-bar" data-width="{% widthratio threat_counts.low_risk|default:0 total_scans 100 %}" style="background:#3b82f6;width:0;transition:width .8s;border-radius:4px;"></div>
+      <span class="donut-count">{{ threat_counts.low_risk|default:"0" }}</span>
+    </div>
+    <div class="donut-row">
+      <span class="donut-label" style="color:#f59e0b;">🟡 Suspicious</span>
+      <div class="donut-bar" data-width="{% widthratio threat_counts.suspicious|default:0 total_scans 100 %}" style="background:#f59e0b;width:0;transition:width .8s;border-radius:4px;"></div>
+      <span class="donut-count">{{ threat_counts.suspicious|default:"0" }}</span>
+    </div>
+    <div class="donut-row">
+      <span class="donut-label" style="color:#ef4444;">🔴 High Risk</span>
+      <div class="donut-bar" data-width="{% widthratio threat_counts.high_risk|default:0 total_scans 100 %}" style="background:#ef4444;width:0;transition:width .8s;border-radius:4px;"></div>
+      <span class="donut-count">{{ threat_counts.high_risk|default:"0" }}</span>
+    </div>
+    <div class="donut-row">
+      <span class="donut-label" style="color:#a855f7;">☠️ Malicious</span>
+      <div class="donut-bar" data-width="{% widthratio threat_counts.malicious|default:0 total_scans 100 %}" style="background:#a855f7;width:0;transition:width .8s;border-radius:4px;"></div>
+      <span class="donut-count">{{ threat_counts.malicious|default:"0" }}</span>
+    </div>
+    {% endif %}
+    {% endwith %}
+  </div>
+
+  <!-- Recent scans -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="icon icon-blue"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>Recent Scans</div>
+      <a href="{% url 'history' %}" style="font-size:13px;color:var(--accent);text-decoration:none;">View all →</a>
+    </div>
+    {% if recent_scans %}
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      {% for scan in recent_scans %}
+      <a href="{% url 'report_detail' scan.pk %}" style="text-decoration:none;display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg3);border-radius:10px;border:1px solid var(--border);transition:.15s;" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div class="risk-circle {{ scan.threat_level }}" style="width:40px;height:40px;font-size:13px;font-weight:900;border-radius:50%;display:grid;place-items:center;flex-shrink:0;
+          {% if scan.threat_level == 'safe' %}background:linear-gradient(135deg,#10b981,#059669);
+          {% elif scan.threat_level == 'low_risk' %}background:linear-gradient(135deg,#3b82f6,#2563eb);
+          {% elif scan.threat_level == 'suspicious' %}background:linear-gradient(135deg,#f59e0b,#d97706);
+          {% elif scan.threat_level == 'high_risk' %}background:linear-gradient(135deg,#ef4444,#dc2626);
+          {% else %}background:linear-gradient(135deg,#a855f7,#7c3aed);{% endif %}
+          color:#fff;">{{ scan.final_risk_score }}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="url-cell" style="font-size:12px;font-family:var(--mono);color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ scan.url }}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">{{ scan.submitted_at|date:"M d, Y H:i" }} &bull; {{ scan.ml_label }}</div>
+        </div>
+        <span class="threat-badge badge-{{ scan.threat_level }}" style="flex-shrink:0;font-size:11px;">{{ scan.threat_level|title }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <h3>No scans yet</h3>
+      <p><a href="{% url 'url_scanner' %}" style="color:var(--accent);">Scan your first URL →</a></p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+// Animate donut bars after load
+setTimeout(()=>{
+  document.querySelectorAll('.donut-bar[data-width]').forEach(b=>{ b.style.width=b.dataset.width+'%'; });
+},100);
+</script>
+{% endblock %}

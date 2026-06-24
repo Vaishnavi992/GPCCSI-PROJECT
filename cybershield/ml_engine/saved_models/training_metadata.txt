@@ -1,0 +1,11 @@
+Date      : 2026-06-22 17:36:20.319617
+Dataset   : combined_dataset.csv (1.58M URLs)
+Sample    : 150,000
+Train     : 120,000   Test: 30,000
+Features  : 59
+Classes   : ['benign', 'defacement', 'malware', 'phishing']
+Accuracy  : 96.85%
+F1 Score  : 96.84%
+ROC-AUC   : 99.64%
+Phishing Recall: 93.45%
+Malware Recall : 99.39%
