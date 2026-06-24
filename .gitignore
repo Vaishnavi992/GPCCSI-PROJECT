@@ -8,3 +8,5 @@ venv/
 .cache/
 db.sqlite3
 cybershield/dataset/
+cybershield/dataset/combined_dataset.csv
+cybershield/dataset/phishing_active.txt
