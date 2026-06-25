@@ -20,3 +20,4 @@ python-dotenv>=1.0.0
 
 gunicorn==26.0.0
 whitenoise==6.11.0
+django==4.2.16
