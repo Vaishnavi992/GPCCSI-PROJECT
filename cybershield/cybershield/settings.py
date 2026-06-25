@@ -8,7 +8,9 @@ load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = 'cybershield-dev-key-change-in-production-xyz789abc'
 DEBUG      = True
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+ALLOWED_HOSTS = ALLOWED_HOSTS = [
+    'gpccsi-project-production.up.railway.app',
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
